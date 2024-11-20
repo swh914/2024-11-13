@@ -1,81 +1,121 @@
 # -*- coding: utf-8 -*-
 """
 Created on Mon Nov  4 18:35:23 2024
-
 @author: UOU
 """
 
 import cv2
 import numpy as np
+import os
 
-# Parameters for drawing
-drawing = False  # True if the mouse is pressed
-ix, iy = -1, -1  # Initial x, y coordinates of the region
+# Function to detect objects and draw rectangles automatically
+def detect_objects(image):
+    # Convert to grayscale
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    
+    # Apply thresholding to segment the image
+    _, thresh = cv2.threshold(gray, 127, 255, cv2.THRESH_BINARY_INV)
+    
+    # Find contours
+    contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    
+    # List to store rectangles
+    rectangles = []
+    for contour in contours:
+        # Get bounding rectangle for each contour
+        x, y, w, h = cv2.boundingRect(contour)
+        if w >= 10 and h >= 10:  # Minimum rectangle size
+            rectangles.append((x, y, w, h))
+    return rectangles
 
-# List to store segmentation points
-annotations = []
-
-# Mouse callback function to draw contours
-def draw_contour(event, x, y, flags, param):
-    global ix, iy, drawing
-
-    if event == cv2.EVENT_LBUTTONDOWN:
-        drawing = True
-        ix, iy = x, y
-        annotations.append([(x, y)])  # Start a new contour
-
-    elif event == cv2.EVENT_MOUSEMOVE:
-        if drawing:
-            # Add points to the current contour
-            annotations[-1].append((x, y))
-
-    elif event == cv2.EVENT_LBUTTONUP:
-        drawing = False
-        # Close the contour by connecting the last point to the first
-        annotations[-1].append((x, y))
-
-# Function to display the image and collect annotations
+# Function to display a single image with segmentation
 def segment_image(image_path):
     # Read the image
     image = cv2.imread(image_path)
     if image is None:
-        print("Image not found!")
-        return
+        print(f"Image not found: {image_path}")
+        return False, False
+
+    # Detect objects and get rectangles
+    rectangles = detect_objects(image)
 
     # Create a clone of the image for annotation display
     annotated_image = image.copy()
-    cv2.namedWindow("Image Segmentation")
-    cv2.setMouseCallback("Image Segmentation", draw_contour)
 
     while True:
-        # Show the annotations on the cloned image
+        # Draw rectangles on the image
         temp_image = annotated_image.copy()
-        for contour in annotations:
-            points = np.array(contour, dtype=np.int32)
-            cv2.polylines(temp_image, [points], isClosed=True, color=(0, 255, 0), thickness=2)
+        for x, y, w, h in rectangles:
+            cv2.rectangle(temp_image, (x, y), (x + w, y + h), color=(0, 255, 0), thickness=2)
+            # Display the rectangle dimensions
+            cv2.putText(temp_image, f"({x}, {y}, {w}, {h})", 
+                        (x, y - 10), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 
+                        0.5, 
+                        (0, 255, 0), 
+                        1)
 
         # Display the image with annotations
         cv2.imshow("Image Segmentation", temp_image)
         
-        # Press 's' to save annotations, 'c' to clear, and 'q' to quit
+        # Press 's' to save annotations, 'q' to quit current or all
         key = cv2.waitKey(1) & 0xFF
         if key == ord("s"):
             # Save annotations
-            with open("annotations.txt", "w") as f:
-                for contour in annotations:
-                    f.write(str(contour) + "\n")
-            print("Annotations saved to annotations.txt")
+            annotation_file = os.path.splitext(image_path)[0] + "_annotations.txt"
+            with open(annotation_file, "w") as f:
+                for x, y, w, h in rectangles:
+                    f.write(f"{x}, {y}, {w}, {h}\n")
+            print(f"Annotations saved to {annotation_file}")
+        elif key == ord("q"):
+            return True  # Signal to quit
         elif key == ord("c"):
             # Clear annotations
-            annotations.clear()
+            rectangles.clear()
             annotated_image = image.copy()
-            print("Annotations cleared")
-        elif key == ord("q"):
+            print("Annotations cleared.")
+
+    cv2.destroyAllWindows()
+    return False
+
+# Function to loop through images in a folder
+def segment_images_in_folder(image_folder):
+    # Get a list of all image files in the folder
+    image_files = [os.path.join(image_folder, f) for f in os.listdir(image_folder) if f.endswith(('.jpg', '.png', '.jpeg'))]
+    
+    if not image_files:
+        print("No images found in the folder.")
+        return
+    
+    index = 0  # Start with the first image
+    
+    while 0 <= index < len(image_files):
+        image_path = image_files[index]
+        print(f"Processing: {image_path}")
+        
+        # Call segment_image for current image
+        exit_program = segment_image(image_path)
+        
+        if exit_program:
+            print("Exiting program.")
+            break
+
+        # Handle navigation with arrow keys
+        key = cv2.waitKey(0) & 0xFF
+        if key == 81:  # Left arrow key
+            index = max(0, index - 1)  # Move to the previous image
+        elif key == 83:  # Right arrow key
+            index = min(len(image_files) - 1, index + 1)  # Move to the next image
+        elif key == ord("q"):  # Quit
+            print("Exiting...")
             break
 
     cv2.destroyAllWindows()
 
-# Example usage
+# Main program
 if __name__ == "__main__":
-    PathNames = r"D:\02_Lectures\2024_2nd\Lecture_Materials\SW_Dev\Project\val2017\val2017"
-    segment_image(PathNames + "//000000000285.jpg")
+    # Path to the folder containing images
+    image_folder = r"C:\Users\cic\Desktop\SW_Dev\Online_Repo-main\Online_Repo-main\Image_dataset"
+    
+    # Start the segmentation and viewing process
+    segment_images_in_folder(image_folder)
