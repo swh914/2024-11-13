@@ -24,7 +24,11 @@ def detect_objects(image):
     for contour in contours:
         # Get bounding rectangle for each contour
         x, y, w, h = cv2.boundingRect(contour)
+<<<<<<< HEAD
         if w >= 10 and h >= 10:  # Minimum rectangle size
+=======
+        if w >= 10 and h >= 10:  # Minimum rectangle size
+>>>>>>> feature/for
             rectangles.append((x, y, w, h))
     return rectangles
 
